@@ -1,0 +1,52 @@
+MIT License
+
+Copyright (c) 2026 SonicTuning Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+**Important Note on JUCE Licensing:**
+
+This project uses the JUCE framework. While JUCE itself is available under the GNU General Public License (GPL), 
+it can also be licensed commercially. For details on JUCE licensing, visit:
+
+https://juce.com/juce-license
+
+**SonicTuning Plugin Commercial Use:**
+
+If you intend to commercially distribute a plugin built with this code, you must obtain a commercial JUCE license 
+in addition to complying with the MIT license terms of this repository.
+
+---
+
+**Third-Party: Signalsmith Stretch**
+
+This project uses [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch)
+for pitch shifting, MIT licensed, fetched via CPM at build time. See that repository
+for its own license text.
+
+---
+
+**Disclaimer:**
+
+This software is provided as-is, for free, with no guarantee it works. Use it at your own risk. If it crashes your
+DAW, corrupts a session, damages your hearing/speakers, or causes any other problem, that's on you, not on the
+authors or contributors. By using, building, or distributing this software, you accept full responsibility for
+any consequences of doing so.

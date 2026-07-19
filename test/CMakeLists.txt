@@ -1,0 +1,44 @@
+cpmaddpackage(
+  NAME
+    googletest
+  GITHUB_REPOSITORY
+    google/googletest
+  GIT_TAG
+    v1.14.0
+  OPTIONS
+    "INSTALL_GTEST OFF"
+    "gtest_force_shared_crt ON"
+)
+
+add_executable(SonicTuningTests
+  TuningTableTests.cpp
+  PluginProcessorTests.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../Source/PluginProcessor.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../Source/PluginEditor.cpp
+)
+
+target_include_directories(SonicTuningTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Source)
+
+# ELK_HEADLESS=0: PluginProcessor::createEditor() constructs the real
+# SonicTuningAudioProcessorEditor, so PluginEditor.cpp must be compiled and linked
+# in here too, even though no test exercises the editor directly.
+target_compile_definitions(SonicTuningTests PRIVATE
+  JUCE_WEB_BROWSER=0
+  JUCE_USE_CURL=0
+  ELK_HEADLESS=0
+  JUCE_PLUGINHOST_VST=0
+  JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
+)
+
+target_link_libraries(SonicTuningTests PRIVATE
+  GTest::gtest_main
+  juce::juce_audio_processors
+  juce::juce_audio_basics
+  juce::juce_dsp
+  juce::juce_gui_basics
+  signalsmith-stretch
+  juce::juce_recommended_config_flags
+)
+
+include(GoogleTest)
+gtest_discover_tests(SonicTuningTests)
