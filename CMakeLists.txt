@@ -116,6 +116,10 @@ target_link_libraries(SonicTuningPlugin PRIVATE
     juce::juce_recommended_warning_flags
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_compile_definitions(SonicTuningPlugin PRIVATE JUCE_JACK=1)
+endif()
+
 target_include_directories(SonicTuningPlugin PRIVATE Source)
 
 option(BUILD_TESTS "When on, downloads GoogleTest and builds the automated test suite" OFF)
