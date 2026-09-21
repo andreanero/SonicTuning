@@ -10,19 +10,19 @@ cpmaddpackage(
     "gtest_force_shared_crt ON"
 )
 
-add_executable(SonicTuningTests
-  TuningTableTests.cpp
+add_executable(SonicMuffTests
+  BigMuffDSPTests.cpp
   PluginProcessorTests.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../Source/PluginProcessor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../Source/PluginEditor.cpp
 )
 
-target_include_directories(SonicTuningTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Source)
+target_include_directories(SonicMuffTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../Source)
 
 # ELK_HEADLESS=0: PluginProcessor::createEditor() constructs the real
-# SonicTuningAudioProcessorEditor, so PluginEditor.cpp must be compiled and linked
+# SonicMuffAudioProcessorEditor, so PluginEditor.cpp must be compiled and linked
 # in here too, even though no test exercises the editor directly.
-target_compile_definitions(SonicTuningTests PRIVATE
+target_compile_definitions(SonicMuffTests PRIVATE
   JUCE_WEB_BROWSER=0
   JUCE_USE_CURL=0
   ELK_HEADLESS=0
@@ -30,15 +30,13 @@ target_compile_definitions(SonicTuningTests PRIVATE
   JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
 )
 
-target_link_libraries(SonicTuningTests PRIVATE
+target_link_libraries(SonicMuffTests PRIVATE
   GTest::gtest_main
   juce::juce_audio_processors
   juce::juce_audio_basics
-  juce::juce_dsp
   juce::juce_gui_basics
-  signalsmith-stretch
   juce::juce_recommended_config_flags
 )
 
 include(GoogleTest)
-gtest_discover_tests(SonicTuningTests)
+gtest_discover_tests(SonicMuffTests)

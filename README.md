@@ -1,34 +1,32 @@
 <div align="center">
 
-# SonicTuning — Alternate-Tuning Pitch Shifter
+# SonicMuff — Big Muff Pi Fuzz Clone
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 ![C++](https://img.shields.io/badge/C++-23-00599C.svg?logo=cplusplus)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.12-orange.svg)
 
-SonicTuning is a real-time pitch-shifting effect that lets a guitar string played in
-standard tuning sound as if it were tuned to an alternate tuning — no re-stringing,
-no re-tuning pegs. Pick the target tuning and which string you're playing; the plugin
-shifts that string's pitch by the exact interval needed.
+SonicMuff is a real-time emulation of the classic op-amp Big Muff Pi fuzz pedal: two
+cascaded diode clipping stages feeding a passive "scooped mids" tone stack, with the
+pedal's three signature knobs — Sustain, Tone, Volume.
 
 </div>
 
 ## UI
 
-Dark theme with amber accents:
+Dark theme with violet accents:
 - Title banner up top.
-- TUNING and STRING selectors.
-- FINE and GAIN knobs.
+- SUSTAIN, TONE and VOLUME knobs.
 - BYPASS toggle — on by default every time the plugin loads.
 - Headless (Elk Audio OS) builds omit the UI entirely; only the parameters remain.
 
 ## ✨ Highlights
 
-- Real-time pitch shifting via [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch)
-- 6 alternate tunings + Drop D, each string mapped to the shortest semitone shift from standard tuning
-- Per-string targeting: tell the plugin which string you're playing, it shifts only by that string's interval
-- Fine-tune trim in cents for intonation correction
-- RT-safe DSP: no allocations in the audio thread, parameter-smoothed output gain
+- Two cascaded soft-clipping (diode-pair) gain stages, each preceded by a coupling
+  high-pass filter that mimics the small capacitors between real Big Muff stages
+- Fixed-frequency scooped-mids tone stack: independent bass/treble legs blended by
+  the TONE knob, so the mid notch stays put while the balance tilts
+- RT-safe DSP: no allocations in the audio thread, parameter-smoothed controls
 - Desktop GUI + headless Elk Audio OS target
 
 ## Quick Build
@@ -64,34 +62,39 @@ cmake --preset elk-headless
 cmake --build --preset elk-headless
 ```
 
-Runs on a Raspberry Pi 4 under Elk Audio OS — Signalsmith Stretch is light enough
-for a single real-time instance on that hardware.
+### CI
+
+`.github/workflows/build-linux.yml`, `build-macos.yml` and `build-windows.yml` each
+build a Release Standalone on their platform and upload it as an artifact.
+`tests.yml` builds and runs the GoogleTest suite on Linux and macOS on every push/PR.
 
 ## Project Layout
 
-- Source/: DSP and UI code (PluginProcessor, PluginEditor, TuningTable)
+- Source/: DSP and UI code (PluginProcessor, PluginEditor, BigMuffDSP)
 - cmake/: build helpers and CPM integration
 - libs/: external dependencies (gitignored)
 
-## Tunings
+## Signal Chain
 
-Each preset lists strings low to high (string 6 → string 1), same convention as
-how tunings are normally written:
-
-- Standard: E A D G B E
-- Drop D: D A D G B E
-- G A B D E G
-- F# F# F# F# E B
-- C G D G B B
-- F# F# E F# E B
-- C G D G C D
+```
+Input
+  ↓
+[Coupling high-pass ~250Hz] → [Diode clip, driven by SUSTAIN] — stage 1
+  ↓
+[Coupling high-pass ~700Hz] → [Diode clip, driven by SUSTAIN] — stage 2
+  ↓
+[Tone stack: bass leg (~300Hz low-pass) / treble leg (~1kHz high-pass), blended by TONE]
+  ↓
+[VOLUME]
+  ↓
+Output
+```
 
 ## Parameters
 
-- TUNING: target tuning preset (default Standard)
-- STRING: which string is being played, 6 (low) – 1 (high) (default 6)
-- FINE: ±50 cents trim (default 0)
-- GAIN: output level, ±24 dB (default 0 dB)
+- SUSTAIN: drive into both clipping stages — more fuzz/sustain as it rises (default 0.5)
+- TONE: blends the tone stack's bass leg (0) and treble leg (1) (default 0.5, "scooped")
+- VOLUME: output level, 0–1 (default 0.5)
 - BYPASS: on / off (default on, reset to on every load — not restored from saved state)
 
 ## License
@@ -104,4 +107,4 @@ Bugs and feature requests via GitHub issues. Pull requests welcome.
 
 ---
 
-Built with JUCE 8.0.12 | Signalsmith Stretch | C++23 | Real‑time safe
+Built with JUCE 8.0.12 | C++23 | Real‑time safe

@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 SonicTuning Contributors
+Copyright (c) 2026 SonicMuff Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -29,18 +29,10 @@ it can also be licensed commercially. For details on JUCE licensing, visit:
 
 https://juce.com/juce-license
 
-**SonicTuning Plugin Commercial Use:**
+**SonicMuff Plugin Commercial Use:**
 
 If you intend to commercially distribute a plugin built with this code, you must obtain a commercial JUCE license 
 in addition to complying with the MIT license terms of this repository.
-
----
-
-**Third-Party: Signalsmith Stretch**
-
-This project uses [Signalsmith Stretch](https://github.com/Signalsmith-Audio/signalsmith-stretch)
-for pitch shifting, MIT licensed, fetched via CPM at build time. See that repository
-for its own license text.
 
 ---
 

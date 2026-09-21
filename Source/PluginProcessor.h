@@ -1,14 +1,14 @@
 #pragma once
 
+#include <vector>
 #include <juce_audio_processors/juce_audio_processors.h>
-#include <signalsmith-stretch/signalsmith-stretch.h>
-#include "TuningTable.h"
+#include "BigMuffDSP.h"
 
-class SonicTuningAudioProcessor  : public juce::AudioProcessor
+class SonicMuffAudioProcessor  : public juce::AudioProcessor
 {
 public:
-    SonicTuningAudioProcessor();
-    ~SonicTuningAudioProcessor() override;
+    SonicMuffAudioProcessor();
+    ~SonicMuffAudioProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -20,7 +20,7 @@ public:
     #endif
     bool hasEditor() const override;
 
-    const juce::String getName() const override { return "SonicTuning"; }
+    const juce::String getName() const override { return "SonicMuff"; }
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -40,13 +40,18 @@ public:
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
-    signalsmith::stretch::SignalsmithStretch<float> stretch;
+    // Sized to the input channel count in prepareToPlay; each channel runs through
+    // fully independent filter/clipper state (see BigMuffDSP.h), no L/R crosstalk.
+    std::vector<BigMuff::ChannelState> channelStates;
 
-    juce::AudioBuffer<float> wetBuffer;
+    float stageOneHpCoeff = 0.0f, stageTwoHpCoeff = 0.0f;
+    float toneBassCoeff = 0.0f, toneTrebleCoeff = 0.0f;
 
-    juce::LinearSmoothedValue<float> smoothedGain;
+    juce::LinearSmoothedValue<float> smoothedSustain;
+    juce::LinearSmoothedValue<float> smoothedTone;
+    juce::LinearSmoothedValue<float> smoothedVolume;
 
     double currentSampleRate = 44100.0;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SonicTuningAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SonicMuffAudioProcessor)
 };
