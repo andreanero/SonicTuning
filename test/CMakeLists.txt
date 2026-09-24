@@ -10,6 +10,14 @@ cpmaddpackage(
     "gtest_force_shared_crt ON"
 )
 
+# Third-party code: don't let warnings from newer compilers (e.g. Apple clang's
+# -Wcharacter-conversion in gtest-printers.h) fail the build.
+foreach(gtest_target gtest gtest_main gmock gmock_main)
+  if(TARGET ${gtest_target})
+    set_target_properties(${gtest_target} PROPERTIES COMPILE_WARNING_AS_ERROR OFF)
+  endif()
+endforeach()
+
 add_executable(SonicMuffTests
   BigMuffDSPTests.cpp
   PluginProcessorTests.cpp
