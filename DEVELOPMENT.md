@@ -1,6 +1,6 @@
-# Development Guide for SonicTuning Plugin
+# Development Guide for SonicMuff Plugin
 
-This document provides guidance for developers working on the SonicTuning plugin.
+This document provides guidance for developers working on the SonicMuff plugin.
 
 ## Architecture Overview
 
@@ -9,25 +9,36 @@ This document provides guidance for developers working on the SonicTuning plugin
 ```
 Audio Input
     ↓
-[Signalsmith Stretch: transpose by semitoneShiftForString(TUNING, STRING) + FINE/100]
+[Coupling high-pass ~250Hz] → [Diode clip stage 1, driven by SUSTAIN]
     ↓
-[Smoothed Output Gain]
+[Coupling high-pass ~700Hz] → [Diode clip stage 2, driven by SUSTAIN]
+    ↓
+[Tone stack: bass leg (~300Hz low-pass) / treble leg (~1kHz high-pass), blended by TONE]
+    ↓
+[VOLUME]
     ↓
 Audio Output
 ```
 
 ## Core Components
 
-### 1. **TuningTable.h**
-- Defines `kTuningPresets`: 7 tunings (Standard + Drop D + 5 alternates), each as
-  6 pitch classes ordered low to high (string 6 → string 1)
-- `shortestSemitoneShift()` — the signed semitone path (in [-6, 6]) from one pitch
-  class to another, taking the shorter direction. Mirrors how a guitarist actually
-  retunes a string (nudge a few semitones, never a whole octave)
-- `semitoneShiftForString(tuningIndex, stringIndex)` — the shift to apply for a
-  given tuning/string combination, relative to standard tuning
-- `tuningChoices()` / `stringChoices()` — display strings for the APVTS choice
-  parameters and the editor's combo boxes
+### 1. **BigMuffDSP.h**
+Pure math, no JUCE dependency (only `<cmath>`): the processor owns state, this header
+is free functions the processor drives, testable entirely on its own.
+
+- `softClip()` — symmetric diode-pair clipper (`tanh`); matched silicon diodes to
+  ground on both gain stages give the Muff's characteristic symmetric squashing
+- `onePoleCoefficient()` — `exp(-2*pi*fc/fs)`, the shared one-pole filter coefficient
+- `OnePoleHighPass` / `OnePoleLowPass` — tiny per-instance filter state structs
+- `ChannelState` — one channel's full filter memory (two coupling high-passes plus the
+  tone stack's bass/treble legs)
+- `process()` — the full per-sample signal path: coupling high-pass → driven clip →
+  coupling high-pass → driven clip → tone stack blend
+
+The tone stack's bass and treble legs sit at **different**, fixed cutoffs (300 Hz /
+1000 Hz) rather than a matched complementary pair, so frequencies between them are
+attenuated by both legs regardless of the TONE knob — the Muff's signature mid-scoop,
+which tilts bass-vs-treble as the knob turns but never fully disappears.
 
 ### 2. **PluginProcessor.h / PluginProcessor.cpp**
 The heart of the plugin. Inherits from `juce::AudioProcessor`.
@@ -39,28 +50,27 @@ The heart of the plugin. Inherits from `juce::AudioProcessor`.
 - Conditional UI creation based on `ELK_HEADLESS` flag
 
 **Real-Time Safety (Elk OS):**
-- No dynamic allocations in `processBlock()` — `signalsmith::stretch::SignalsmithStretch`
-  is configured once in `prepareToPlay()` via `presetDefault()`, and the scratch
-  `wetBuffer` is sized there too
-- `LinearSmoothedValue<float>` prevents gain clicks
-- Latency is reported to the host via `setLatencySamples()` in `prepareToPlay()`,
-  using `stretch.inputLatency() + stretch.outputLatency()`
+- No dynamic allocations in `processBlock()` — `channelStates` is sized once in
+  `prepareToPlay()` off the reported input channel count
+- `LinearSmoothedValue<float>` prevents clicks on SUSTAIN/TONE/VOLUME changes
+- Filter coefficients are computed once per sample-rate change (`prepareToPlay()`),
+  not per sample or per block
 
 **Process Loop (`processBlock`):**
 1. Return early if `BYPASS` is on (default)
-2. Compute the target transpose in semitones: `semitoneShiftForString(TUNING, STRING) + FINE / 100`
-3. `stretch.process()` the input into `wetBuffer`
-4. Copy `wetBuffer` back into the main buffer, applying smoothed `GAIN`
+2. Advance the smoothed SUSTAIN/TONE/VOLUME targets once per sample
+3. Run each channel's sample through `BigMuff::process()`
+4. Apply the smoothed VOLUME gain
 
 ### 3. **PluginEditor.h / PluginEditor.cpp** (Desktop Only)
 Conditional compilation: **Only compiled when `ELK_HEADLESS=0`**
 
-Custom dark editor (`SonicTuningAudioProcessorEditor`), not the generic JUCE editor:
-- `TuningRotaryLook` — custom `LookAndFeel_V4` for the rotary knobs
-- `setupSlider()` / `setupComboBox()` — shared styling helpers for each control
-- TUNING/STRING combo boxes, FINE/GAIN rotary knobs, and a BYPASS toggle, all bound
-  to `apvts` via `ComboBoxAttachment` / `SliderAttachment` / `ButtonAttachment`
-- Layout lives in `resized()`; colours/fonts are set per-control in the `setup*()` helpers
+Custom dark editor (`SonicMuffAudioProcessorEditor`), not the generic JUCE editor:
+- `MuffRotaryLook` — custom `LookAndFeel_V4` for the rotary knobs
+- `setupSlider()` — shared styling helper for each control
+- SUSTAIN/TONE/VOLUME rotary knobs and a BYPASS toggle, all bound to `apvts` via
+  `SliderAttachment` / `ButtonAttachment`
+- Layout lives in `resized()`; colours/fonts are set per-control in `setupSlider()`
 
 ## Building & Testing
 
@@ -89,20 +99,17 @@ cmake --build --preset elk-headless
 ```
 - No GUI code compiled
 - Minimal footprint
-- Real-time safe; validated as a single-instance target on Raspberry Pi 4
+- Real-time safe
+
+### CI
+
+`.github/workflows/build-linux.yml`, `build-macos.yml` and `build-windows.yml` each
+configure and build a Release Standalone on their platform (Ninja on Linux/macOS, the
+default MSVC generator on Windows) and upload the result as a build artifact.
+`tests.yml` runs the GoogleTest suite on Linux and macOS on every push to `main` and
+every pull request.
 
 ## Extending the Plugin
-
-### Adding a New Tuning
-
-1. **Add a preset to `kTuningPresets`** in `TuningTable.h`, listing pitch classes
-   low to high (string 6 → string 1):
-```cpp
-{ "New Tuning Name", { PitchClass::E, PitchClass::A, PitchClass::D, PitchClass::G, PitchClass::B, PitchClass::E } },
-```
-2. `tuningChoices()` picks it up automatically — no other change needed, since the
-   `TUNING` parameter's choice list and `semitoneShiftForString()` both read from
-   `kTuningPresets`.
 
 ### Adding a New Parameter
 
@@ -134,8 +141,8 @@ float value = smoothedNewParam.getNextValue();
 
 ### Running Unit Tests
 
-Tests live in `test/` (GoogleTest, fetched via CPM) and cover the tuning math
-(`TuningTable`) and the processor (`PluginProcessor`: parameter defaults, bypass
+Tests live in `test/` (GoogleTest, fetched via CPM) and cover the clipping/tone-stack
+math (`BigMuffDSP`) and the processor (`PluginProcessor`: parameter defaults, bypass
 pass-through, `processBlock()` output sanity, state save/load round-trip).
 
 ```bash
@@ -146,23 +153,23 @@ ctest --preset default-with-tests
 
 The test target compiles both `PluginProcessor.cpp` and `PluginEditor.cpp` with
 `ELK_HEADLESS=0`, since `createEditor()` constructs the real
-`SonicTuningAudioProcessorEditor` — even though no test exercises the editor
+`SonicMuffAudioProcessorEditor` — even though no test exercises the editor
 directly, it has to be compiled and linked for the test binary to build.
 
 ### Adding a New Test
 
 1. Add a `.cpp` file under `test/` with `TEST(...)` / `TEST_P(...)` cases
-2. List it in `test/CMakeLists.txt`'s `add_executable(SonicTuningTests ...)` sources
+2. List it in `test/CMakeLists.txt`'s `add_executable(SonicMuffTests ...)` sources
 
 ### Adding a New UI Control
 
 To add a new control to the existing custom editor (`PluginEditor.h/.cpp`):
 
 1. Declare the component (and label, if any) in `PluginEditor.h`
-2. Style it via `setupSlider()` / `setupComboBox()`, or add a new helper for other
-   component types (see `bypassButton` setup for a `ToggleButton` example)
+2. Style it via `setupSlider()`, or add a new helper for other component types (see
+   `bypassButton` setup for a `ToggleButton` example)
 3. Bind it to `apvts` with the matching attachment type
-   (`SliderAttachment` / `ComboBoxAttachment` / `ButtonAttachment`)
+   (`SliderAttachment` / `ButtonAttachment`)
 4. Position it in `resized()`
 
 ## Performance Considerations
@@ -176,12 +183,10 @@ To add a new control to the existing custom editor (`PluginEditor.h/.cpp`):
 - [ ] Use `juce::ScopedNoDenormals` to prevent CPU overhead from denormalized floats
 
 ### Optimization Tips
-1. **Pitch shift quality vs. CPU**: `stretch.presetDefault()` favors quality; switch
-   to `stretch.presetCheaper()` if CPU headroom is tight on embedded targets.
-2. **Latency**: Signalsmith Stretch has inherent algorithmic latency
-   (`inputLatency() + outputLatency()`), reported to the host via
-   `setLatencySamples()`. There's no way to shift pitch in real time with zero
-   latency — budget for it in live rigs.
+1. **Filter coefficients**: `onePoleCoefficient()` calls involve `std::exp()`; they're
+   computed once in `prepareToPlay()` (on sample-rate change), never per sample.
+2. **Latency**: unlike a pitch-shifter, this signal chain is zero-latency — every stage
+   is a simple IIR/waveshaper with no lookahead or blockwise buffering.
 
 ## Elk Audio OS Integration
 
@@ -193,11 +198,11 @@ In Sushi's config.json:
   "osc_server_port": 7890,
   "plugins": [
     {
-      "uid": "sonictuning",
+      "uid": "sonicmuff",
       "path": "path/to/plugin.so",
       "parameters": [
-        { "id": "TUNING", "gpio": 3 },
-        { "id": "STRING", "gpio": 4 }
+        { "id": "SUSTAIN", "gpio": 3 },
+        { "id": "TONE", "gpio": 4 }
       ]
     }
   ]
@@ -206,7 +211,7 @@ In Sushi's config.json:
 
 ### OSC Control Example
 ```bash
-oscsend localhost 7890 /parameter/sonictuning/TUNING f 0.33
+oscsend localhost 7890 /parameter/sonicmuff/SUSTAIN f 0.8
 ```
 
 ## Common Issues & Solutions

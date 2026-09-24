@@ -2,31 +2,29 @@
 #if !ELK_HEADLESS
 #include "PluginEditor.h"
 #endif
+#include <array>
 
-SonicTuningAudioProcessor::SonicTuningAudioProcessor()
+SonicMuffAudioProcessor::SonicMuffAudioProcessor()
     : AudioProcessor (BusesProperties().withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
                                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
 }
 
-SonicTuningAudioProcessor::~SonicTuningAudioProcessor() {}
+SonicMuffAudioProcessor::~SonicMuffAudioProcessor() {}
 
-juce::AudioProcessorValueTreeState::ParameterLayout SonicTuningAudioProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout SonicMuffAudioProcessor::createParameterLayout()
 {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        "TUNING", "Target Tuning", tuningChoices(), 0));
-
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
-        "STRING", "String", stringChoices(), 0));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        "SUSTAIN", "Sustain", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
-        "FINE", "Fine Tune", juce::NormalisableRange<float> (-50.0f, 50.0f, 0.1f), 0.0f));
+        "TONE", "Tone", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
-        "GAIN", "Output Gain", juce::NormalisableRange<float> (-24.0f, 24.0f, 0.1f), 0.0f));
+        "VOLUME", "Volume", juce::NormalisableRange<float> (0.0f, 1.0f), 0.5f));
 
     layout.add (std::make_unique<juce::AudioParameterBool> (
         "BYPASS", "Bypass", true));
@@ -34,63 +32,75 @@ juce::AudioProcessorValueTreeState::ParameterLayout SonicTuningAudioProcessor::c
     return layout;
 }
 
-void SonicTuningAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
+void SonicMuffAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    juce::ignoreUnused (samplesPerBlock);
     currentSampleRate = sampleRate;
 
-    int const numChannels = getTotalNumInputChannels();
+    stageOneHpCoeff = BigMuff::onePoleCoefficient (BigMuff::kStageOneHighPassHz, sampleRate);
+    stageTwoHpCoeff = BigMuff::onePoleCoefficient (BigMuff::kStageTwoHighPassHz, sampleRate);
+    toneBassCoeff   = BigMuff::onePoleCoefficient (BigMuff::kToneBassHz, sampleRate);
+    toneTrebleCoeff = BigMuff::onePoleCoefficient (BigMuff::kToneTrebleHz, sampleRate);
 
-    stretch.presetDefault (numChannels, static_cast<float> (sampleRate));
-    setLatencySamples (stretch.inputLatency() + stretch.outputLatency());
+    channelStates.assign (static_cast<size_t> (juce::jmax (1, getTotalNumInputChannels())), BigMuff::ChannelState {});
+    for (auto& state : channelStates)
+        state.reset();
 
-    wetBuffer.setSize (numChannels, samplesPerBlock, false, false, true);
-
-    smoothedGain.reset (sampleRate, 0.02);
+    smoothedSustain.reset (sampleRate, 0.02);
+    smoothedTone.reset    (sampleRate, 0.02);
+    smoothedVolume.reset  (sampleRate, 0.02);
 }
 
-void SonicTuningAudioProcessor::releaseResources()
+void SonicMuffAudioProcessor::releaseResources()
 {
-    stretch.reset();
+    for (auto& state : channelStates)
+        state.reset();
 }
 
-void SonicTuningAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void SonicMuffAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
 
     if (*apvts.getRawParameterValue ("BYPASS") > 0.5f)
         return;
 
-    int const tuningIndex = static_cast<int> (*apvts.getRawParameterValue ("TUNING"));
-    int const stringIndex = static_cast<int> (*apvts.getRawParameterValue ("STRING"));
-    float const fineCents = *apvts.getRawParameterValue ("FINE");
-    float const gainDb = *apvts.getRawParameterValue ("GAIN");
-
-    double const semitones = semitoneShiftForString (tuningIndex, stringIndex) + fineCents / 100.0;
-    stretch.setTransposeSemitones (static_cast<float> (semitones));
-
-    smoothedGain.setTargetValue (juce::Decibels::decibelsToGain (gainDb));
+    smoothedSustain.setTargetValue (*apvts.getRawParameterValue ("SUSTAIN"));
+    smoothedTone.setTargetValue    (*apvts.getRawParameterValue ("TONE"));
+    smoothedVolume.setTargetValue  (*apvts.getRawParameterValue ("VOLUME"));
 
     int const numSamples = buffer.getNumSamples();
-    int const numChannels = buffer.getNumChannels();
+    int const numChannels = juce::jmin (buffer.getNumChannels(), static_cast<int> (channelStates.size()));
 
-    stretch.process (buffer.getArrayOfReadPointers(), numSamples, wetBuffer.getArrayOfWritePointers(), numSamples);
+    std::array<float*, 2> channelPtrs {};
+    for (int channel = 0; channel < numChannels; ++channel)
+        channelPtrs[static_cast<size_t> (channel)] = buffer.getWritePointer (channel);
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        float const gain = smoothedGain.getNextValue();
-        for (int ch = 0; ch < numChannels; ++ch)
-            buffer.setSample (ch, sample, wetBuffer.getSample (ch, sample) * gain);
+        float const sustain = smoothedSustain.getNextValue();
+        float const tone    = smoothedTone.getNextValue();
+        float const volume  = smoothedVolume.getNextValue();
+
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            auto* channelData = channelPtrs[static_cast<size_t> (channel)];
+            float const shaped = BigMuff::process (channelData[sample], channelStates[static_cast<size_t> (channel)],
+                                                    stageOneHpCoeff, stageTwoHpCoeff,
+                                                    toneBassCoeff, toneTrebleCoeff,
+                                                    sustain, tone);
+            channelData[sample] = shaped * volume;
+        }
     }
 }
 
-void SonicTuningAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+void SonicMuffAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
 }
 
-void SonicTuningAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+void SonicMuffAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
     if (xmlState != nullptr && xmlState->hasTagName (apvts.state.getType()))
@@ -99,7 +109,7 @@ void SonicTuningAudioProcessor::setStateInformation (const void* data, int sizeI
     apvts.getParameter ("BYPASS")->setValueNotifyingHost (1.0f);
 }
 
-bool SonicTuningAudioProcessor::hasEditor() const
+bool SonicMuffAudioProcessor::hasEditor() const
 {
     #if ELK_HEADLESS
     return false;
@@ -109,13 +119,13 @@ bool SonicTuningAudioProcessor::hasEditor() const
 }
 
 #if !ELK_HEADLESS
-juce::AudioProcessorEditor* SonicTuningAudioProcessor::createEditor()
+juce::AudioProcessorEditor* SonicMuffAudioProcessor::createEditor()
 {
-    return new SonicTuningAudioProcessorEditor (*this);
+    return new SonicMuffAudioProcessorEditor (*this);
 }
 #endif
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new SonicTuningAudioProcessor();
+    return new SonicMuffAudioProcessor();
 }

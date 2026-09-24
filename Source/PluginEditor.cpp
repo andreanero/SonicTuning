@@ -1,18 +1,18 @@
 #include "PluginEditor.h"
 
-TuningRotaryLook::TuningRotaryLook()
+MuffRotaryLook::MuffRotaryLook()
 {
-    setColour (juce::Slider::rotarySliderFillColourId, accentAmber);
+    setColour (juce::Slider::rotarySliderFillColourId, accentViolet);
     setColour (juce::Slider::rotarySliderOutlineColourId, juce::Colour (0xFF333333));
     setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     setColour (juce::Slider::textBoxBackgroundColourId, darkBg);
-    setColour (juce::Slider::textBoxTextColourId, accentAmber);
-    setColour (juce::Slider::thumbColourId, accentAmber);
+    setColour (juce::Slider::textBoxTextColourId, accentViolet);
+    setColour (juce::Slider::thumbColourId, accentViolet);
 }
 
-void TuningRotaryLook::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
-                                         float sliderPosProportional, float rotaryStartAngle,
-                                         float rotaryEndAngle, juce::Slider&)
+void MuffRotaryLook::drawRotarySlider (juce::Graphics& g, int x, int y, int width, int height,
+                                       float sliderPosProportional, float rotaryStartAngle,
+                                       float rotaryEndAngle, juce::Slider&)
 {
     auto radius = (float) juce::jmin (width / 2, height / 2) - 2.0f;
     auto centreX = (float) x + (float) width * 0.5f;
@@ -31,7 +31,7 @@ void TuningRotaryLook::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
     juce::Path filledArc;
     filledArc.addCentredArc (centreX, centreY, radius, radius,
                             0.0f, rotaryStartAngle, angle, true);
-    g.setColour (accentAmber);
+    g.setColour (accentViolet);
     g.strokePath (filledArc, juce::PathStrokeType (4.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     juce::Path pointer;
@@ -44,82 +44,59 @@ void TuningRotaryLook::drawRotarySlider (juce::Graphics& g, int x, int y, int wi
 
 //==============================================================================
 
-SonicTuningAudioProcessorEditor::SonicTuningAudioProcessorEditor (SonicTuningAudioProcessor& p)
+SonicMuffAudioProcessorEditor::SonicMuffAudioProcessorEditor (SonicMuffAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     setLookAndFeel (&rotaryLook);
 
-    setupComboBox (tuningSelector, tuningLabel, "TUNING");
-    setupComboBox (stringSelector, stringLabel, "STRING");
+    setupSlider (sustainSlider, sustainLabel, "SUSTAIN");
+    setupSlider (toneSlider, toneLabel, "TONE");
+    setupSlider (volumeSlider, volumeLabel, "VOLUME");
 
-    tuningSelector.addItemList (tuningChoices(), 1);
-    stringSelector.addItemList (stringChoices(), 1);
-
-    setupSlider (fineSlider, fineLabel, "FINE");
-    setupSlider (gainSlider, gainLabel, "GAIN");
-
-    fineSlider.setRange (-50.0f, 50.0f, 0.1f);
-    gainSlider.setRange (-24.0f, 24.0f, 0.1f);
+    sustainSlider.setRange (0.0f, 1.0f, 0.001f);
+    toneSlider.setRange (0.0f, 1.0f, 0.001f);
+    volumeSlider.setRange (0.0f, 1.0f, 0.001f);
 
     bypassButton.setButtonText ("BYPASS");
-    bypassButton.setColour (juce::ToggleButton::textColourId, juce::Colour (0xFFFFA500));
-    bypassButton.setColour (juce::ToggleButton::tickColourId, juce::Colour (0xFFFFA500));
+    bypassButton.setColour (juce::ToggleButton::textColourId, juce::Colour (0xFF9B59B6));
+    bypassButton.setColour (juce::ToggleButton::tickColourId, juce::Colour (0xFF9B59B6));
     bypassButton.setColour (juce::ToggleButton::tickDisabledColourId, juce::Colour (0xFF444444));
     addAndMakeVisible (bypassButton);
 
-    tuningAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        audioProcessor.apvts, "TUNING", tuningSelector);
-    stringAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        audioProcessor.apvts, "STRING", stringSelector);
-    fineAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        audioProcessor.apvts, "FINE", fineSlider);
-    gainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
-        audioProcessor.apvts, "GAIN", gainSlider);
+    sustainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        audioProcessor.apvts, "SUSTAIN", sustainSlider);
+    toneAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        audioProcessor.apvts, "TONE", toneSlider);
+    volumeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
+        audioProcessor.apvts, "VOLUME", volumeSlider);
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (
         audioProcessor.apvts, "BYPASS", bypassButton);
 
-    setSize (500, 380);
+    setSize (420, 340);
 }
 
-SonicTuningAudioProcessorEditor::~SonicTuningAudioProcessorEditor()
+SonicMuffAudioProcessorEditor::~SonicMuffAudioProcessorEditor()
 {
     setLookAndFeel (nullptr);
 }
 
-void SonicTuningAudioProcessorEditor::setupSlider (juce::Slider& slider, juce::Label& label, const juce::String& name)
+void SonicMuffAudioProcessorEditor::setupSlider (juce::Slider& slider, juce::Label& label, const juce::String& name)
 {
     slider.setSliderStyle (juce::Slider::RotaryVerticalDrag);
     slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 60, 20);
     slider.setColour (juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     slider.setColour (juce::Slider::textBoxBackgroundColourId, juce::Colour (0xFF1a1a1a));
-    slider.setColour (juce::Slider::textBoxTextColourId, juce::Colour (0xFFFFA500));
+    slider.setColour (juce::Slider::textBoxTextColourId, juce::Colour (0xFF9B59B6));
     addAndMakeVisible (slider);
 
     label.setText (name, juce::dontSendNotification);
     label.setJustificationType (juce::Justification::centred);
     label.attachToComponent (&slider, false);
     label.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
-    label.setColour (juce::Label::textColourId, juce::Colour (0xFFFFA500));
+    label.setColour (juce::Label::textColourId, juce::Colour (0xFF9B59B6));
 }
 
-void SonicTuningAudioProcessorEditor::setupComboBox (juce::ComboBox& box, juce::Label& label, const juce::String& name)
-{
-    box.setEditableText (false);
-    box.setJustificationType (juce::Justification::centred);
-    box.setColour (juce::ComboBox::backgroundColourId, juce::Colour (0xFF2a2a2a));
-    box.setColour (juce::ComboBox::textColourId, juce::Colour (0xFFFFA500));
-    box.setColour (juce::ComboBox::outlineColourId, juce::Colour (0xFF444444));
-    box.setColour (juce::ComboBox::buttonColourId, juce::Colour (0xFFFFA500));
-    addAndMakeVisible (box);
-
-    label.setText (name, juce::dontSendNotification);
-    label.setJustificationType (juce::Justification::centred);
-    label.attachToComponent (&box, false);
-    label.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
-    label.setColour (juce::Label::textColourId, juce::Colour (0xFFFFA500));
-}
-
-void SonicTuningAudioProcessorEditor::paint (juce::Graphics& g)
+void SonicMuffAudioProcessorEditor::paint (juce::Graphics& g)
 {
     g.fillAll (juce::Colour (0xFF0f0f0f));
 
@@ -127,31 +104,26 @@ void SonicTuningAudioProcessorEditor::paint (juce::Graphics& g)
     g.drawRect (getLocalBounds(), 2);
 
     g.setFont (juce::Font (juce::FontOptions (28.0f, juce::Font::bold)));
-    g.setColour (juce::Colour (0xFFFFA500));
-    g.drawFittedText ("SONICTUNING", getLocalBounds().removeFromTop (60), juce::Justification::centredTop, 1);
+    g.setColour (juce::Colour (0xFF9B59B6));
+    g.drawFittedText ("SONICMUFF", getLocalBounds().removeFromTop (60), juce::Justification::centredTop, 1);
 
     g.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::italic)));
-    g.setColour (juce::Colour (0xFFAA7000));
-    g.drawFittedText ("RETUNE WITHOUT RETUNING", getLocalBounds().removeFromBottom (20), juce::Justification::centredBottom, 1);
+    g.setColour (juce::Colour (0xFF6E3B8C));
+    g.drawFittedText ("FUZZ WITHOUT THE PEDAL", getLocalBounds().removeFromBottom (20), juce::Justification::centredBottom, 1);
 }
 
-void SonicTuningAudioProcessorEditor::resized()
+void SonicMuffAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced (20);
     area.removeFromTop (70);
 
-    auto selectorRow = area.removeFromTop (60);
-    tuningSelector.setBounds (selectorRow.removeFromBottom (30).reduced (40, 0));
-
-    auto selectorRow2 = area.removeFromTop (60);
-    stringSelector.setBounds (selectorRow2.removeFromBottom (30).reduced (40, 0));
+    auto knobRow = area.removeFromTop (160);
+    auto knobWidth = knobRow.getWidth() / 3;
+    sustainSlider.setBounds (knobRow.removeFromLeft (knobWidth).reduced (10));
+    toneSlider.setBounds (knobRow.removeFromLeft (knobWidth).reduced (10));
+    volumeSlider.setBounds (knobRow.removeFromLeft (knobWidth).reduced (10));
 
     area.removeFromTop (20);
-
-    auto knobRow = area.removeFromTop (140);
-    auto knobWidth = knobRow.getWidth() / 2;
-    fineSlider.setBounds (knobRow.removeFromLeft (knobWidth).reduced (10));
-    gainSlider.setBounds (knobRow.removeFromLeft (knobWidth).reduced (10));
 
     auto bypassRow = area.removeFromTop (30);
     bypassButton.setBounds (bypassRow.withSizeKeepingCentre (100, 30));

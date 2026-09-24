@@ -5,7 +5,7 @@ set(CMAKE_POLICY_DEFAULT_CMP0141        NEW      CACHE STRING "" FORCE)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "10.11" CACHE STRING "" FORCE)
 set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "" FORCE)
 
-project(SonicTuningPlugin VERSION 1.0.0)
+project(SonicMuffPlugin VERSION 1.0.0)
 
 # Option to decide whether to build the Headless version for Elk OS
 option(ELK_HEADLESS_BUILD "Build the plugin without GUI for Elk Audio OS" OFF)
@@ -34,22 +34,6 @@ cpmaddpackage(
     ${LIB_DIR}/juce
 )
 
-cpmaddpackage(
-  NAME
-    signalsmith-stretch
-  GIT_TAG
-    1.1.0
-  GITHUB_REPOSITORY
-    Signalsmith-Audio/signalsmith-stretch
-  SOURCE_DIR
-    ${LIB_DIR}/signalsmith-stretch
-)
-
-# signalsmith-stretch ships no CMakeLists.txt, so CPM downloads its sources but
-# creates no target. Declare it ourselves as a header-only interface library.
-add_library(signalsmith-stretch INTERFACE)
-target_include_directories(signalsmith-stretch INTERFACE ${LIB_DIR})
-
 include(cmake/CompilerWarnings.cmake)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -61,7 +45,7 @@ endif()
 set(SharedSources
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
-    Source/TuningTable.h
+    Source/BigMuffDSP.h
 )
 
 if (NOT ELK_HEADLESS_BUILD)
@@ -71,22 +55,22 @@ if (NOT ELK_HEADLESS_BUILD)
     )
 endif()
 
-juce_add_plugin(SonicTuningPlugin
+juce_add_plugin(SonicMuffPlugin
     COMPANY_NAME "JangolizerLabs"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     FORMATS VST3 LV2 Standalone
-    PRODUCT_NAME "SonicTuning"
-    LV2URI "https://jangolizer.audio/sonictuning"
+    PRODUCT_NAME "SonicMuff"
+    LV2URI "https://jangolizer.audio/sonicmuff"
     VST3_AUTO_MANIFEST FALSE
 )
 
-target_sources(SonicTuningPlugin PRIVATE ${SharedSources})
+target_sources(SonicMuffPlugin PRIVATE ${SharedSources})
 
 if (ELK_HEADLESS_BUILD)
-    target_compile_definitions(SonicTuningPlugin PRIVATE
+    target_compile_definitions(SonicMuffPlugin PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         ELK_HEADLESS=1
@@ -94,7 +78,7 @@ if (ELK_HEADLESS_BUILD)
         JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1
     )
 else()
-    target_compile_definitions(SonicTuningPlugin PRIVATE
+    target_compile_definitions(SonicMuffPlugin PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
         ELK_HEADLESS=0
@@ -103,13 +87,11 @@ else()
     )
 endif()
 
-target_link_libraries(SonicTuningPlugin PRIVATE
+target_link_libraries(SonicMuffPlugin PRIVATE
     juce::juce_audio_processors
     juce::juce_audio_basics
     juce::juce_audio_devices
     juce::juce_audio_utils
-    juce::juce_dsp
-    signalsmith-stretch
     PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
@@ -117,10 +99,10 @@ target_link_libraries(SonicTuningPlugin PRIVATE
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_compile_definitions(SonicTuningPlugin PRIVATE JUCE_JACK=1)
+    target_compile_definitions(SonicMuffPlugin PRIVATE JUCE_JACK=1)
 endif()
 
-target_include_directories(SonicTuningPlugin PRIVATE Source)
+target_include_directories(SonicMuffPlugin PRIVATE Source)
 
 option(BUILD_TESTS "When on, downloads GoogleTest and builds the automated test suite" OFF)
 if(BUILD_TESTS)

@@ -16,18 +16,17 @@ namespace
 
 TEST (PluginProcessorTest, ParameterLayoutHasExpectedDefaults)
 {
-    SonicTuningAudioProcessor processor;
+    SonicMuffAudioProcessor processor;
 
-    EXPECT_EQ (static_cast<int> (*processor.apvts.getRawParameterValue ("TUNING")), 0); // Standard
-    EXPECT_EQ (static_cast<int> (*processor.apvts.getRawParameterValue ("STRING")), 0); // String 6
-    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("FINE"), 0.0f);
-    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("GAIN"), 0.0f);
+    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("SUSTAIN"), 0.5f);
+    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("TONE"), 0.5f);
+    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("VOLUME"), 0.5f);
     EXPECT_GT (*processor.apvts.getRawParameterValue ("BYPASS"), 0.5f);
 }
 
 TEST (PluginProcessorTest, BypassedProcessBlockLeavesBufferUnchanged)
 {
-    SonicTuningAudioProcessor processor;
+    SonicMuffAudioProcessor processor;
     processor.prepareToPlay (48000.0, 512);
 
     auto buffer = makeTestBuffer (2, 512, 0.5f);
@@ -39,17 +38,19 @@ TEST (PluginProcessorTest, BypassedProcessBlockLeavesBufferUnchanged)
             EXPECT_FLOAT_EQ (buffer.getSample (ch, i), 0.5f);
 }
 
-TEST (PluginProcessorTest, ProcessBlockProducesFiniteBoundedOutputWhenActive)
+TEST (PluginProcessorTest, ProcessBlockProducesFiniteOutputWhenActive)
 {
-    SonicTuningAudioProcessor processor;
+    SonicMuffAudioProcessor processor;
     processor.prepareToPlay (48000.0, 512);
     processor.apvts.getParameter ("BYPASS")->setValueNotifyingHost (0.0f);
-    processor.apvts.getParameter ("TUNING")->setValueNotifyingHost (2.0f / 6.0f); // "G A B D E G"
-    processor.apvts.getParameter ("STRING")->setValueNotifyingHost (0.0f);
+    processor.apvts.getParameter ("SUSTAIN")->setValueNotifyingHost (0.9f);
+    processor.apvts.getParameter ("TONE")->setValueNotifyingHost (0.3f);
 
     auto buffer = makeTestBuffer (2, 512, 0.5f);
     juce::MidiBuffer midi;
-    processor.processBlock (buffer, midi);
+
+    for (int block = 0; block < 4; ++block)
+        processor.processBlock (buffer, midi);
 
     for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
     {
@@ -62,22 +63,43 @@ TEST (PluginProcessorTest, ProcessBlockProducesFiniteBoundedOutputWhenActive)
     }
 }
 
+TEST (PluginProcessorTest, ZeroVolumeSilencesActiveOutput)
+{
+    SonicMuffAudioProcessor processor;
+    processor.prepareToPlay (48000.0, 512);
+    processor.apvts.getParameter ("BYPASS")->setValueNotifyingHost (0.0f);
+    processor.apvts.getParameter ("SUSTAIN")->setValueNotifyingHost (1.0f);
+    processor.apvts.getParameter ("VOLUME")->setValueNotifyingHost (0.0f);
+
+    auto buffer = makeTestBuffer (2, 512, 0.5f);
+    juce::MidiBuffer midi;
+
+    // Two blocks: the first still ramps the smoothed VOLUME down from its default;
+    // by the second block it's settled at 0.
+    processor.processBlock (buffer, midi);
+    processor.processBlock (buffer, midi);
+
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            EXPECT_NEAR (buffer.getSample (ch, i), 0.0f, 1.0e-4f);
+}
+
 TEST (PluginProcessorTest, StateRoundTripsThroughGetAndSetStateInformation)
 {
-    SonicTuningAudioProcessor processor;
+    SonicMuffAudioProcessor processor;
     processor.prepareToPlay (48000.0, 512);
 
-    auto* fineParam = processor.apvts.getParameter ("FINE");
-    fineParam->setValueNotifyingHost (0.9f);
-    float const savedFine = *processor.apvts.getRawParameterValue ("FINE");
+    auto* sustainParam = processor.apvts.getParameter ("SUSTAIN");
+    sustainParam->setValueNotifyingHost (0.9f);
+    float const savedSustain = *processor.apvts.getRawParameterValue ("SUSTAIN");
 
     juce::MemoryBlock state;
     processor.getStateInformation (state);
 
-    fineParam->setValueNotifyingHost (0.1f);
-    ASSERT_NE (*processor.apvts.getRawParameterValue ("FINE"), savedFine);
+    sustainParam->setValueNotifyingHost (0.1f);
+    ASSERT_NE (*processor.apvts.getRawParameterValue ("SUSTAIN"), savedSustain);
 
     processor.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
 
-    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("FINE"), savedFine);
+    EXPECT_FLOAT_EQ (*processor.apvts.getRawParameterValue ("SUSTAIN"), savedSustain);
 }
